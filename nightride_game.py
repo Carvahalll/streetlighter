@@ -12,11 +12,13 @@ W, H = 1920, 1080
 FPS  = 60
 
 # ── Perspective geometry ─────────────────────────────────────────────────────
-HORIZON_Y     = H * 0.40
+# Road now fills the whole screen — horizon sits at the very top.
+HORIZON_Y     = 0
 ROAD_HALF_BOT = W * 0.50
-ROAD_HALF_TOP = W * 0.030
+ROAD_HALF_TOP = W * 0.004   # tiny vanishing point at the very top
 
-CAM_X_MAX     = W * 0.36
+# Player can now steer all the way to the road edges.
+CAM_X_MAX     = W * 0.50
 CAM_STEER_SPD = 1.5    # lerp speed when steering
 CAM_RETURN_SPD= 2.0    # lerp speed when releasing (was 5.5)
 
@@ -31,10 +33,17 @@ OBJ_SPAWN_Z = 0.98
 OBJ_HIT_Z   = 0.03
 OBJ_CULL_Z  = -0.02
 
+# ── Player hitbox (single source of truth) ───────────────────────────────────
+# The visible square at the bottom AND the collision test both use this.
+HITBOX_HALF = 36                       # half-size of the drawn square (px)
+HITBOX_Y    = H - 10 - HITBOX_HALF * 2 # top-Y of the drawn square
+HITBOX_CX_SCREEN = W // 2              # horizontal centre on screen (fixed)
+# Collision tolerance in screen pixels at the near-plane (z≈0).
+# Matches the drawn square's half-width so what you see is what you hit.
+HITBOX_COLLIDE_PX = HITBOX_HALF
+
 # ── Neon palette ─────────────────────────────────────────────────────────────
 C_BG        = (  2,   0,  10)
-C_SKY_TOP   = (  2,   0,  14)
-C_SKY_BOT   = (  8,   0,  30)
 C_ROAD      = (  5,   3,  16)
 
 NEON_CYAN   = (  0, 255, 255)
@@ -52,9 +61,6 @@ NEON_RED    = (255,  10,  60)
 OBS_COLORS  = [NEON_PINK, NEON_ORANGE, NEON_RED]
 
 # ── Glow cache — build once, blit many ───────────────────────────────────────
-# We pre-render glow halos at integer radii / sizes into a dict.
-# Key: ('circle', color, radius) or ('rect', color, w, h)
-
 _GLOW_CACHE: dict = {}
 
 def _make_circle_glow(color, radius, passes=4, spread=5):
@@ -68,7 +74,7 @@ def _make_circle_glow(color, radius, passes=4, spread=5):
     pygame.draw.circle(surf, color, (total, total), radius)
     white = tuple(min(255, c + 140) for c in color)
     pygame.draw.circle(surf, white, (total, total), max(2, radius // 3))
-    return surf, total   # surf + offset to center
+    return surf, total
 
 def get_circle_glow(color, radius):
     key = ('c', color, radius)
@@ -107,50 +113,6 @@ def blit_rect_glow(surf, color, rect):
     gs, pad = get_rect_glow(color, rect.w, rect.h)
     surf.blit(gs, (rect.x - pad, rect.y - pad))
 
-# ── Static pre-baked surfaces (built once in main) ───────────────────────────
-SKY_SURF   = None   # full-width sky gradient + horizon glow
-ROAD_SURF  = None   # static dark road fill (trapezoid drawn each frame — cheap)
-
-def build_sky():
-    """Pre-render the static sky gradient + horizon glow into a surface."""
-    sky_h = int(HORIZON_Y) + 40   # a bit past horizon so road edge overlaps cleanly
-    s = pygame.Surface((W, sky_h))
-    for y in range(sky_h):
-        t = min(1.0, y / HORIZON_Y)
-        r = int(C_SKY_TOP[0] + (C_SKY_BOT[0] - C_SKY_TOP[0]) * t)
-        g = int(C_SKY_TOP[1] + (C_SKY_BOT[1] - C_SKY_TOP[1]) * t)
-        b = int(C_SKY_TOP[2] + (C_SKY_BOT[2] - C_SKY_TOP[2]) * t)
-        pygame.draw.line(s, (r, g, b), (0, y), (W, y))
-
-    # Horizon glow bands — baked in once
-    glow_data = [(NEON_PURPLE, 110, 28), (NEON_PINK, 75, 14), (NEON_CYAN, 50, 8)]
-    hy = int(HORIZON_Y)
-    for color, base_a, thick in glow_data:
-        for i in range(thick):
-            a = int(base_a * (1 - i / thick))
-            c = (*color, a)
-            # draw as a per-pixel line directly on s using set_at is too slow;
-            # use a tiny surf per band (only done ONCE at startup)
-            band = pygame.Surface((W, 1), pygame.SRCALPHA)
-            band.fill(c)
-            s.blit(band, (0, hy - i))
-            s.blit(band, (0, hy + i))
-    return s
-
-def build_stars(n=220):
-    """Fixed star positions (seed-stable) returned as a list of (x,y,r,brightness)."""
-    rng = random.Random(42)
-    stars = []
-    for _ in range(n):
-        x  = rng.randint(0, W - 1)
-        y  = rng.randint(0, int(HORIZON_Y) - 24)
-        br = rng.randint(90, 255)
-        r  = rng.choice([1, 1, 1, 2, 2, 3])
-        speed = rng.uniform(0.05, 0.15)   # parallax multiplier
-        twink = rng.uniform(0.8, 4.0)
-        stars.append((x, y, r, br, speed, twink))
-    return stars
-
 # ── Perspective helpers ───────────────────────────────────────────────────────
 
 def project(lane_frac, z, cam_x):
@@ -163,18 +125,13 @@ def project(lane_frac, z, cam_x):
 
 # ── Road drawing (hot path — no SRCALPHA surfaces) ───────────────────────────
 
-def draw_scene(surf, cam_x, road_offset, stars, gt):
-    # 1. Sky (pre-baked, single blit)
-    surf.blit(SKY_SURF, (0, 0))
+def draw_scene(surf, cam_x, road_offset, gt):
+    # Fill everything with the dark road colour — no sky anymore.
+    surf.fill(C_ROAD)
 
-    # 2. Stars (plain circles, no alpha surf)
-    for (sx, sy, sr, br, spd, twink) in stars:
-        px = int(sx + cam_x * spd) % W
-        tb = int(br * (0.75 + 0.25 * math.sin(gt * twink + sx)))
-        pygame.draw.circle(surf, (tb, tb, min(255, tb + 30)), (px, sy), sr)
-
-    # 3. Road fill — simple trapezoid, no SRCALPHA
     def ex(frac, z): return project(frac, z, cam_x)[0]
+
+    # 1. Road trapezoid (goes all the way up now)
     road_poly = [
         (ex(-0.5, 0.999), HORIZON_Y),
         (ex( 0.5, 0.999), HORIZON_Y),
@@ -183,8 +140,7 @@ def draw_scene(surf, cam_x, road_offset, stars, gt):
     ]
     pygame.draw.polygon(surf, C_ROAD, road_poly)
 
-    # 4. Scrolling horizontal grid lines — drawn as plain lines (no alpha)
-    # Approximate perspective stripes using pre-computed z positions
+    # 2. Scrolling horizontal grid lines — plain lines (no alpha)
     stripe_z_step = 0.09
     z_off = (road_offset * 0.005) % stripe_z_step
     z = z_off
@@ -201,7 +157,7 @@ def draw_scene(surf, cam_x, road_offset, stars, gt):
                              max(1, int(3 * (1 - z))))
         z += stripe_z_step
 
-    # 5. Lane dashes — plain lines, sampled coarsely
+    # 3. Lane dashes — plain lines, sampled coarsely
     NUM_SEGS = 16
     for lane in range(1, NUM_OBJ_LANES):
         frac = (lane / NUM_OBJ_LANES) - 0.5
@@ -220,7 +176,7 @@ def draw_scene(surf, cam_x, road_offset, stars, gt):
                 pygame.draw.line(surf, c, prev, pt, thick)
             prev = pt
 
-    # 6. Road edges — bright neon, plain lines
+    # 4. Road edges — bright neon cyan, plain lines
     for side in [-0.5, 0.5]:
         prev = None
         for si in range(NUM_SEGS + 1):
@@ -230,14 +186,13 @@ def draw_scene(surf, cam_x, road_offset, stars, gt):
             pt  = (sx2, sy2)
             if prev:
                 bright = int(255 * (1 - z2))
-                c = (0, bright, bright)   # neon cyan fade
+                c = (0, bright, bright)
                 thick = max(1, int(5 * (1 - z2)))
                 pygame.draw.line(surf, c, prev, pt, thick)
             prev = pt
 
 # ── Objects ───────────────────────────────────────────────────────────────────
 
-# Pre-quantise sizes so glow cache stays small
 OBS_SIZES  = [4, 8, 12, 16, 22, 28, 36, 46, 58, 72, 88, 104, 120]
 COIN_SIZES = [3, 5, 7, 10, 14, 18, 22, 28, 34]
 
@@ -258,23 +213,18 @@ class RoadObject:
         return (self.lane / (NUM_OBJ_LANES - 1)) - 0.5
 
     def update(self, dt):
-        # Objects accelerate as they approach — perspective-correct movement.
-        # At z≈1 (far) the step is tiny; at z≈0 (near) it's full speed.
-        # We use (1 - z + 0.05) so there's always a minimum closing speed.
         self.z     -= self.speed * (1.0 - self.z + 0.08) * dt
         self.pulse += dt * 5.0
 
     def is_hit(self, cam_x):
         if self.z >= OBJ_HIT_Z:
             return False
-        # Compute object screen_x at current z, compare to fixed player centre W/2
-        ROAD_HALF_BOT = W * 0.50
-        ROAD_HALF_TOP = W * 0.030
+        # Project obstacle to screen-X at current z, then compare against the
+        # drawn hitbox square at the screen centre. Tolerance = visible square half-width.
         half_w   = ROAD_HALF_BOT + (ROAD_HALF_TOP - ROAD_HALF_BOT) * self.z
         center_x = W / 2 + cam_x * (1.0 - self.z)
         obj_sx   = center_x + self.lane_frac * half_w * 2
-        tolerance = half_w * 2 / NUM_OBJ_LANES * 0.55  # ~half a lane width on screen
-        return abs(obj_sx - W / 2) < tolerance
+        return abs(obj_sx - HITBOX_CX_SCREEN) < HITBOX_COLLIDE_PX
 
     def off_screen(self):
         return self.z < OBJ_CULL_Z
@@ -377,10 +327,10 @@ def draw_hud(surf, score, speed, combo, player_lane, cam_x, font_big, font_small
               int(NEON_YELLOW[2]*t + NEON_GREEN[2]*(1-t)))
         surf.blit(font_small.render(f"x{combo}  COMBO", True, cc), (28, 38))
 
-    # ── Hitbox square — fixed at screen centre (first-person: road moves, player doesn't) ──
-    hx = W // 2
-    sq        = 36   # square half-size
-    sq_y      = H - 10 - sq * 2
+    # ── Hitbox square — matches the actual collision box ───────────────────
+    hx        = HITBOX_CX_SCREEN
+    sq        = HITBOX_HALF
+    sq_y      = HITBOX_Y
     sq_rect   = pygame.Rect(hx - sq, sq_y, sq * 2, sq * 2)
     # Glow outline
     for i in range(4, 0, -1):
@@ -394,7 +344,6 @@ def draw_hud(surf, score, speed, combo, player_lane, cam_x, font_big, font_small
     pygame.draw.line(surf, (255,255,255), (hx, sq_y + sq - 6), (hx, sq_y + sq + 6), 2)
 
 def draw_game_over(surf, score, font_huge, font_big, font_small, t):
-    # Semi-transparent overlay — pre-fill once then blit
     ov = pygame.Surface((W, H))
     ov.set_alpha(210)
     ov.fill((0, 0, 0))
@@ -444,16 +393,11 @@ def make_state():
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    global SKY_SURF
     pygame.init()
     screen = pygame.display.set_mode((W, H), pygame.FULLSCREEN)
     pygame.display.set_caption("Night Ride")
     pygame.mouse.set_visible(False)
     clock = pygame.time.Clock()
-
-    # Pre-bake static surfaces
-    SKY_SURF = build_sky()
-    stars    = build_stars(220)
 
     # Warm the glow cache for common obstacle/coin sizes so first frames don't stutter
     for col in OBS_COLORS:
@@ -488,15 +432,12 @@ def main():
                 (-1.0 if keys[pygame.K_RIGHT] else 0.0)
 
         if s["alive"]:
-            # Camera only moves when steering — stays put when no input
             if steer != 0:
                 s["cam_x"] += steer * CAM_STEER_SPD * CAM_X_MAX * dt
                 s["cam_x"]  = max(-CAM_X_MAX, min(CAM_X_MAX, s["cam_x"]))
 
-            # Player lane derived directly from cam_x so they stay in sync
             s["player_lane"] = ((s["cam_x"] / CAM_X_MAX) * 0.5 + 0.5) * (NUM_OBJ_LANES - 1)
 
-            # Scroll / speed
             s["road_offset"] += s["speed"] * dt * 60
             s["speed_timer"] += dt
             if s["speed_timer"] >= 10.0:
@@ -504,12 +445,10 @@ def main():
                 s["speed"]      += SPEED_INCREMENT
             s["score"] += int(s["speed"] * dt * 3)
 
-            # Combo decay
             s["combo_timer"] += dt
             if s["combo_timer"] > 3.0:
                 s["combo"] = 0
 
-            # Spawn
             s["obs_timer"] += dt
             if s["obs_timer"] >= OBSTACLE_INTERVAL:
                 s["obs_timer"] = 0.0
@@ -542,7 +481,7 @@ def main():
 
         # ── Draw ──────────────────────────────────────────────────────────
         screen.fill(C_BG)
-        draw_scene(screen, s["cam_x"], s["road_offset"], stars, gt)
+        draw_scene(screen, s["cam_x"], s["road_offset"], gt)
 
         for obj in sorted(s["objects"], key=lambda o: o.z, reverse=True):
             obj.draw(screen, s["cam_x"])
