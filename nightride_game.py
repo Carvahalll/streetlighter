@@ -360,7 +360,7 @@ def draw_game_over(surf, score, font_huge, font_big, font_small, t):
     surf.blit(go, (gx, gy))
 
     sc  = font_big.render(f"SCORE   {score:,}", True, NEON_GREEN)
-    rst = font_small.render("SPACE · restart          ESC · quit", True, (120, 80, 190))
+    rst = font_small.render("BOTH BRAKES or SPACE · restart          ESC · quit", True, (120, 80, 190))
     surf.blit(sc,  (cx - sc.get_width()  // 2, cy - 20))
     surf.blit(rst, (cx - rst.get_width() // 2, cy + 82))
 
@@ -412,6 +412,7 @@ def main():
 
     s  = make_state()
     gt = 0.0
+    both_prev = False  # tracks previous-frame state of LEFT+RIGHT for edge-trigger restart
 
     while True:
         dt = min(clock.tick(FPS) / 1000.0, 0.05)
@@ -425,8 +426,17 @@ def main():
                     pygame.quit(); sys.exit()
                 if event.key == pygame.K_SPACE and not s["alive"]:
                     s = make_state()
+                    both_prev = False
 
         keys  = pygame.key.get_pressed()
+
+        # Restart on both brakes (LEFT + RIGHT) while dead — edge-triggered so
+        # holding both down doesn't instantly re-restart after a new game.
+        both_now = keys[pygame.K_LEFT] and keys[pygame.K_RIGHT]
+        if both_now and not both_prev and not s["alive"]:
+            s = make_state()
+        both_prev = both_now
+
         steer = ( 1.0 if keys[pygame.K_LEFT] else 0.0) + \
                 (-1.0 if keys[pygame.K_RIGHT] else 0.0)
 
@@ -486,7 +496,7 @@ def main():
             obj.draw(screen, s["cam_x"])
 
         for sp in s["sparks"]:
-            sp.draw(screen)
+            sp.draw(screen) 
 
         draw_hud(screen, s["score"], s["speed"], s["combo"],
                  s["player_lane"], s["cam_x"],
