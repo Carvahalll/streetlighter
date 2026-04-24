@@ -92,9 +92,9 @@ love love/
 - [x] HUD (score, speed bar, combo display, hitbox square)
 - [x] Game-over overlay + restart
 - [x] Logical canvas → letterboxed window scaling
+- [x] GPU bloom shader (threshold → half-res Gaussian blur → additive composite)
 
 ### Planned
-- [ ] GPU glow/bloom shader (neon aesthetic upgrade)
 - [ ] Sound effects (coin collect, obstacle hit, engine hum)
 - [ ] Custom pixel/neon font
 - [ ] Raspberry Pi deployment test

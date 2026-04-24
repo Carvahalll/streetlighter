@@ -10,6 +10,7 @@ local Road    = require("game.road")
 local Objects = require("game.objects")
 local Sparks  = require("game.sparks")
 local HUD     = require("game.hud")
+local Bloom   = require("game.bloom")
 local Input   = require("input")
 
 -- ── Globals ───────────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ function love.load()
     offset_y = (ph - C.H * sc) / 2
 
     HUD.load()
+    Bloom.load(C.W, C.H)
 
     s = State.new()
     Input.reset()
@@ -143,10 +145,16 @@ function love.draw()
         HUD.drawGameOver(s.score, s.gt)
     end
 
-    -- Blit canvas to window (letterboxed / scaled)
+    -- Bloom pass (threshold → half-res Gaussian blur, stored internally)
     love.graphics.setCanvas()
+    Bloom.apply(canvas)
+
+    -- Blit game canvas to window (letterboxed / scaled)
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.draw(canvas, offset_x, offset_y, 0, scale_x, scale_y)
+
+    -- Additive bloom overlay on top
+    Bloom.draw(offset_x, offset_y, scale_x, scale_y)
 end
 
 function love.keypressed(key)
