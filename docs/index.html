@@ -34,6 +34,7 @@
       color: var(--text);
       font-family: 'Courier New', Courier, monospace;
       min-height: 100vh;
+      overflow-x: hidden;
     }
 
     /* ── Neon glow helpers ──────────────────────────────────────── */
@@ -90,11 +91,15 @@
     }
 
     .hero-title {
-      font-size: clamp(3rem, 10vw, 8rem);
+      font-size: clamp(1.8rem, 10vw, 8rem);
       font-weight: bold;
       letter-spacing: 0.15em;
       color: var(--cyan);
       margin-bottom: 0.35em;
+    }
+
+    @media (max-width: 480px) {
+      .hero-title { letter-spacing: 0.04em; }
     }
 
     .hero-subtitle {
@@ -172,7 +177,7 @@
     }
 
     /* ══════════════════════════════════════════════════════════════
-       GAME EMBED SECTION  (desktop only)
+       GAME EMBED SECTION
     ══════════════════════════════════════════════════════════════ */
     .game-section {
       padding: 80px 20px 60px;
@@ -250,7 +255,7 @@
 
   <p class="hero-subtitle glow-pink">Eine interaktive Lichtinstallation auf dem Nextbike</p>
 
-  <img src="Concept_sketch.jpeg" alt="Konzeptskizze" style="max-width:660px; width:100%; margin: 2rem 0; box-shadow: 0 0 24px var(--cyan);">
+  <img src="Concept_sketch.jpeg" alt="Konzeptskizze" style="max-width:660px; width:100%; margin: 2rem 0;">
 
   <div class="hero-desc">
     <p>Fahrradfahren bereitet Freude, ist im Alltag jedoch auch mit Herausforderungen verbunden. Um diese Erfahrung den Besucherinnen und Besuchern des LiLu auf spielerische Weise zu vermitteln, schlagen wir auf dem Inseli eine interaktive Fahrrad-Installation vor.
@@ -334,5 +339,25 @@ Nebenberuflich ist Aurel als Lichttechniker und Musiker in Luzern engagiert.</p>
   Runs in browser via <a href="https://github.com/Davidobot/love.js" target="_blank" rel="noopener">love.js</a>
 </footer>
 
+<script>
+  function scaleGame() {
+    const wrap  = document.querySelector('.game-frame-wrap');
+    const frame = document.querySelector('.game-frame');
+    if (!wrap || !frame) return;
+    const available = Math.min(window.innerWidth - 40, 1280);
+    const scale = available / 1280;
+    if (scale < 1) {
+      frame.style.transform       = 'scale(' + scale + ')';
+      frame.style.transformOrigin = 'top left';
+      wrap.style.width  = available + 'px';
+      wrap.style.height = (720 * scale) + 'px';
+    } else {
+      frame.style.transform = frame.style.transformOrigin = '';
+      wrap.style.width = wrap.style.height = '';
+    }
+  }
+  scaleGame();
+  window.addEventListener('resize', scaleGame);
+</script>
 </body>
 </html>
