@@ -21,23 +21,108 @@ The same Love2D source runs on both platforms without modification. Flip `FULLSC
 
 ```
 Night_Ride/
-├── nightride_game.py       pygame prototype (reference, do not delete)
-├── arduino_code/           Arduino Leonardo sketch
-├── README.md               this file
+├── nightride_game.py           pygame prototype (reference, do not delete)
+├── arduino_code/               Arduino Leonardo sketch
+├── README.md                   this file
 ├── .gitignore
-└── love/                   Love2D project (run with: love love/)
-    ├── conf.lua            window / module config
-    ├── main.lua            entry point; FULLSCREEN flag lives here
-    ├── input.lua           key polling + both-brakes edge detection
-    ├── game/
-    │   ├── constants.lua   all magic numbers (mirrors pygame globals)
-    │   ├── state.lua       makeState() / reset
-    │   ├── road.lua        project() + drawRoad()
-    │   ├── objects.lua     RoadObject — obstacles & coins
-    │   ├── sparks.lua      particle burst on coin collect
-    │   └── hud.lua         score, speed bar, combo, hitbox, game-over overlay
-    └── audio/              placeholder — sound effects go here
+├── love/                       Love2D project (run with: love love/)
+│   ├── conf.lua                window / module config
+│   ├── main.lua                entry point; FULLSCREEN flag lives here
+│   ├── input.lua               key polling + both-brakes edge detection
+│   ├── assets/
+│   │   ├── background/
+│   │   │   ├── pilatus.svg     source artwork
+│   │   │   └── pilatus.png     white-on-transparent PNG (rendered from SVG)
+│   │   └── scenery/
+│   │       ├── *.svg           source artwork (altstadt, bahnhof, hofkirche, …)
+│   │       └── *.png           white-on-transparent PNGs (rendered from SVGs)
+│   └── game/
+│       ├── constants.lua       all magic numbers; HORIZON_Y controls sky height
+│       ├── state.lua           game state + reset
+│       ├── road.lua            project() + drawRoad()
+│       ├── objects.lua         RoadObject — obstacles, swans, coins, gate
+│       ├── background.lua      Pilatus image + lake shimmer
+│       ├── scenery.lua         Lucerne landmark sprites (perspective zoom-in)
+│       ├── sparks.lua          particle burst on coin collect
+│       ├── bloom.lua           GPU bloom shader
+│       └── hud.lua             score, speed bar, combo, hitbox, game-over overlay
+└── docs/                       GitHub Pages site (served from main branch /docs)
+    ├── index.html              landing page
+    └── game/
+        ├── shell.html          custom dark shell (do NOT delete — survives rebuilds)
+        ├── game.data           bundled game assets (rebuilt by love.js)
+        ├── game.js             love.js loader glue  (rebuilt by love.js)
+        ├── love.js             Emscripten runtime   (rebuilt by love.js)
+        └── love.wasm           Love2D WebAssembly   (rebuilt by love.js)
 ```
+
+---
+
+## Deploying to GitHub Pages
+
+The live site is at **https://carvahalll.github.io/night-ride/**.
+GitHub Pages serves the `docs/` folder on the `main` branch automatically — pushing is all that's needed.
+
+### Steps
+
+**1. Rebuild the web bundle**
+
+```bash
+npx love.js@11.4.1 -c -t "Night Ride" love/ docs/game/
+```
+
+This regenerates `docs/game/game.data`, `game.js`, `love.js`, and `love.wasm`.
+It also overwrites `docs/game/index.html` with a default shell — ignore that file,
+the custom shell lives in `docs/game/shell.html` and is never touched by the rebuild.
+
+**2. Stage only the rebuilt files**
+
+```bash
+git add docs/game/game.data docs/game/game.js docs/game/love.js docs/game/love.wasm
+# Do NOT add docs/game/index.html
+```
+
+If you also changed Lua source or assets, stage those too:
+
+```bash
+git add love/
+```
+
+**3. Commit and push**
+
+```bash
+git commit -m "Rebuild web bundle: <short description>"
+
+# The large love.wasm (≈4.5 MB) needs a bigger HTTP buffer:
+git -c http.postBuffer=524288000 push origin main
+```
+
+GitHub Pages rebuilds automatically within ~1–2 minutes after the push.
+
+### Lua compatibility note
+
+love.js runs **Lua 5.1**. Avoid:
+- `goto` / `::label::` statements (Lua 5.2+)
+- `table.unpack` with index range args — use a helper table instead
+
+### Re-rendering SVG assets
+
+The scenery and Pilatus images are stored as both `.svg` (source) and `.png` (white-on-transparent, loaded by the game). To re-render after editing an SVG:
+
+```bash
+# Pilatus (full game width)
+sed 's/fill="#000000"/fill="#ffffff"/g' love/assets/background/pilatus.svg > /tmp/w.svg
+sips -s format png --resampleWidth 1280 /tmp/w.svg --out love/assets/background/pilatus.png
+
+# Scenery items (max 600 px)
+for svg in love/assets/scenery/*.svg; do
+  name=$(basename "${svg%.svg}")
+  sed 's/fill="#000000"/fill="#ffffff"/g' "$svg" > /tmp/w.svg
+  sips -s format png -Z 600 /tmp/w.svg --out "love/assets/scenery/${name}.png"
+done
+```
+
+Then run `git add love/assets/` and rebuild the bundle.
 
 ---
 
