@@ -1,6 +1,8 @@
 -- Scenery: Lucerne landmarks that zoom in from the horizon on both sides of the
 -- road, using the same perspective projection as road objects.
--- Images are white-on-transparent PNGs; setColor() tints them to neon hues.
+-- Images are solid-filled silhouettes (any color on transparent); the shader
+-- discards the pixel RGB and substitutes the neon tint color, using only the
+-- image alpha as a mask.
 
 local C = require("game.constants")
 
@@ -25,12 +27,23 @@ local NEON_PALETTE = {
     {0.0, 1.0, 0.31},  -- neon-green
 }
 
--- ── Module state ──────────────────────────────────────────────────────────────
-local images      = {}   -- { img, w, h }
-local items       = {}   -- active scenery items
-local spawn_timer = 0
+-- Replaces each pixel's RGB with the draw color; alpha comes from the image.
+local SILHOUETTE_SHADER = love.graphics.newShader([[
+    vec4 effect(vec4 color, Image tex, vec2 uv, vec2 sc) {
+        float a = Texel(tex, uv).a;
+        if (a < 0.01) { discard; }
+        return vec4(color.rgb, color.a * a);
+    }
+]])
 
-local SPAWN_INTERVAL = 12.0  -- seconds between paired spawns (one per side)
+-- ── Module state ──────────────────────────────────────────────────────────────
+local images       = {}    -- { img, w, h }
+local items        = {}    -- active scenery items
+local spawn_timer  = 0
+local next_side    = -1    -- alternates: -1 = left, 1 = right
+local last_img_idx = nil   -- prevent same image appearing twice in a row
+
+local SPAWN_INTERVAL = 6.0   -- seconds between single spawns (alternating left/right)
 local CULL_Z         = 0.42  -- remove item when it gets this close (before road fills screen)
 
 -- lane_frac controls how far outside the road edges the building appears.
@@ -44,10 +57,36 @@ local function randcol()
     return NEON_PALETTE[love.math.random(#NEON_PALETTE)]
 end
 
-local function spawnOne(speed, side)
+local function spawnOne(speed)
     if #images == 0 then return end
-    local lane_frac = side * (LANE_MIN + love.math.random() * (LANE_MAX - LANE_MIN))
-    local idx = love.math.random(#images)
+
+    -- Pool: images not currently visible on screen
+    local on_screen = {}
+    for _, item in ipairs(items) do
+        on_screen[item.img_idx] = true
+    end
+    local pool = {}
+    for i = 1, #images do
+        if not on_screen[i] then pool[#pool+1] = i end
+    end
+
+    -- All images already on screen — skip this spawn
+    if #pool == 0 then return end
+
+    -- Prefer not repeating the last spawned image; fall back if no other choice
+    local preferred = {}
+    for _, i in ipairs(pool) do
+        if i ~= last_img_idx then preferred[#preferred+1] = i end
+    end
+    local candidates = #preferred > 0 and preferred or pool
+
+    local idx        = candidates[love.math.random(#candidates)]
+    last_img_idx     = idx
+
+    local side       = next_side
+    next_side        = -next_side
+    local lane_frac  = side * (LANE_MIN + love.math.random() * (LANE_MAX - LANE_MIN))
+
     items[#items+1] = {
         z          = C.OBJ_SPAWN_Z,
         speed      = speed * 0.020,
@@ -69,12 +108,10 @@ function Scenery.load()
 end
 
 function Scenery.update(dt, speed)
-    -- Spawn a pair (left + right) every SPAWN_INTERVAL seconds
     spawn_timer = spawn_timer + dt
     if spawn_timer >= SPAWN_INTERVAL then
         spawn_timer = 0
-        spawnOne(speed, -1)   -- left side
-        spawnOne(speed,  1)   -- right side
+        spawnOne(speed)
     end
 
     -- Advance each item toward the camera, cull when too close
@@ -107,11 +144,13 @@ function Scenery.draw(cam_x)
 
             if sc >= 0.01 then
                 local col = item.color
+                love.graphics.setShader(SILHOUETTE_SHADER)
                 love.graphics.setColor(col[1], col[2], col[3], 0.92)
                 love.graphics.draw(idata.img,
                     screen_x - idata.w * sc / 2,
                     screen_y - idata.h * sc,
                     0, sc, sc)
+                love.graphics.setShader()
             end
         end
     end
@@ -120,8 +159,10 @@ function Scenery.draw(cam_x)
 end
 
 function Scenery.reset()
-    items       = {}
-    spawn_timer = 0
+    items        = {}
+    spawn_timer  = 0
+    next_side    = -1
+    last_img_idx = nil
 end
 
 return Scenery
