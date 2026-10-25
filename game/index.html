@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Streetlighter</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        background: #02000a;
+        width: 1280px;
+        height: 720px;
+        overflow: hidden;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      #loadingCanvas { position: absolute; }
+      /* the canvas must not have any border or padding, or mouse coords will be wrong */
+      #canvas {
+        display: block;
+        border: 0 none;
+        visibility: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="loadingCanvas" width="1280" height="720"></canvas>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+
+    <script type='text/javascript'>
+      var loadingContext = document.getElementById('loadingCanvas').getContext('2d');
+      function drawLoadingText(text) {
+        var canvas = loadingContext.canvas;
+        loadingContext.fillStyle = '#02000a';
+        loadingContext.fillRect(0, 0, canvas.scrollWidth, canvas.scrollHeight);
+        loadingContext.font = '1.4em "Courier New", monospace';
+        loadingContext.textAlign = 'center';
+        loadingContext.fillStyle = '#00ffff';
+        loadingContext.shadowColor = '#00ffff';
+        loadingContext.shadowBlur = 12;
+        loadingContext.fillText(text, canvas.scrollWidth / 2, canvas.scrollHeight / 2);
+      }
+
+      window.onload  = function () { window.focus(); };
+      window.onclick = function () { window.focus(); };
+
+      window.addEventListener('keydown', function (e) {
+        // prevent arrow keys and space from scrolling the page
+        if ([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) e.preventDefault();
+      }, false);
+
+      var Module = {
+        arguments: ['./'],
+        INITIAL_MEMORY: 16777216,
+        printErr: console.error.bind(console),
+        canvas: (function () {
+          var canvas = document.getElementById('canvas');
+          canvas.addEventListener('webglcontextlost', function (e) {
+            alert('WebGL context lost. You will need to reload the page.');
+            e.preventDefault();
+          }, false);
+          return canvas;
+        })(),
+        setStatus: function (text) {
+          if (text) {
+            drawLoadingText(text);
+          } else if (Module.remainingDependencies === 0) {
+            document.getElementById('loadingCanvas').style.display = 'none';
+            document.getElementById('canvas').style.visibility = 'visible';
+          }
+        },
+        totalDependencies: 0,
+        remainingDependencies: 0,
+        monitorRunDependencies: function (left) {
+          this.remainingDependencies = left;
+          this.totalDependencies = Math.max(this.totalDependencies, left);
+          Module.setStatus(left
+            ? 'Preparing… (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')'
+            : 'All downloads complete.');
+        }
+      };
+
+      Module.setStatus('Downloading…');
+
+      window.onerror = function () {
+        Module.setStatus('Exception thrown, see JavaScript console');
+        Module.setStatus = function (text) {
+          if (text) Module.printErr('[post-exception status] ' + text);
+        };
+      };
+
+      var applicationLoad = function () { Love(Module); };
+    </script>
+    <script type="text/javascript" src="game.js"></script>
+    <script async type="text/javascript" src="love.js" onload="applicationLoad(this)"></script>
+  </body>
+</html>

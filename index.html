@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<!--
+  Streetlighter — GitHub Pages landing page
+  Plain HTML/CSS/JS, no frameworks, no build steps.
+
+  To rebuild the game after changing Lua source:
+    npx love.js@11.4.1 -c -t "Streetlighter" love/ docs/game/
+  Then commit the updated docs/game/ files.
+  NOTE: the rebuild regenerates docs/game/index.html (love.js default — ignored).
+  Our custom dark shell lives at docs/game/shell.html and is NOT touched by rebuilds.
+-->
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Streetlighter</title>
+  <style>
+    /* ── Reset & custom properties ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #02000a;
+      --cyan:   #00ffff;
+      --pink:   #ff00b4;
+      --purple: #a000ff;
+      --text:   #b0a0d0;
+      --dim:    rgba(176, 160, 208, 0.45);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', Courier, monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Neon glow helpers ──────────────────────────────────────── */
+    .glow-cyan {
+      text-shadow:
+        0 0  6px var(--cyan),
+        0 0 20px var(--cyan),
+        0 0 45px var(--cyan);
+    }
+    .glow-pink {
+      text-shadow:
+        0 0  6px var(--pink),
+        0 0 18px var(--pink),
+        0 0 38px var(--pink);
+    }
+
+    /* ── Neon divider ───────────────────────────────────────────── */
+    .neon-divider {
+      width: 80%;
+      max-width: 900px;
+      height: 1px;
+      margin: 2.5rem auto;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      box-shadow: 0 0 8px var(--cyan);
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       HERO SECTION
+    ══════════════════════════════════════════════════════════════ */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 60px 40px;
+      position: relative;
+    }
+
+    /* Subtle scanline overlay */
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0, 0, 0, 0.07) 3px,
+        rgba(0, 0, 0, 0.07) 4px
+      );
+      pointer-events: none;
+    }
+
+    .hero-title {
+      font-size: clamp(1.8rem, 10vw, 8rem);
+      font-weight: bold;
+      letter-spacing: 0.15em;
+      color: var(--cyan);
+      margin-bottom: 0.35em;
+    }
+
+    @media (max-width: 480px) {
+      .hero-title { letter-spacing: 0.04em; }
+    }
+
+    .hero-subtitle {
+      font-size: clamp(0.9rem, 2.5vw, 1.35rem);
+      color: var(--pink);
+      letter-spacing: 0.25em;
+      margin-bottom: 3rem;
+    }
+
+    .hero-desc {
+      max-width: 660px;
+      line-height: 1.85;
+      font-size: 1rem;
+      color: var(--text);
+    }
+    .hero-desc p + p { margin-top: 1em; }
+
+    .hero-desc ul {
+      list-style: none;
+      padding: 0;
+    }
+    .hero-desc ul li::before {
+      content: '— ';
+      color: var(--cyan);
+    }
+    .hero-desc ul li + li { margin-top: 0.4em; }
+
+    /* ── Subsection label (e.g. "Technischer Projektbeschrieb") ── */
+    .sub-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.3em;
+      color: var(--cyan);
+      text-transform: uppercase;
+      text-shadow: 0 0 8px var(--cyan);
+      margin-top: 1.5rem;
+    }
+
+    .scroll-hint {
+      margin-top: 4rem;
+      font-size: 0.8rem;
+      letter-spacing: 0.25em;
+      color: var(--purple);
+      text-shadow: 0 0 8px var(--purple);
+      animation: pulse 2.2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50%       { opacity: 1;   }
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       TEXT SECTION (Über uns, Budget, etc.)
+    ══════════════════════════════════════════════════════════════ */
+    .text-section {
+      padding: 60px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       VIDEO SECTION
+    ══════════════════════════════════════════════════════════════ */
+    .video-section {
+      padding: 80px 20px 60px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .video-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.35em;
+      color: var(--purple);
+      text-transform: uppercase;
+      text-shadow: 0 0 8px var(--purple);
+    }
+
+    .video-wrap {
+      position: relative;
+      line-height: 0;
+      max-width: 100%;
+    }
+
+    .video-wrap::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border: 2px solid var(--pink);
+      box-shadow:
+        0 0 14px var(--pink),
+        inset 0 0 14px rgba(255, 0, 180, 0.05);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .demo-video {
+      display: block;
+      width: 70vw;
+      max-width: 1280px;
+      height: auto;
+      background: #02000a;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       GAME EMBED SECTION
+    ══════════════════════════════════════════════════════════════ */
+    .game-section {
+      padding: 80px 20px 60px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .game-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.35em;
+      color: var(--purple);
+      text-transform: uppercase;
+      text-shadow: 0 0 8px var(--purple);
+    }
+
+    .game-frame-wrap {
+      position: relative;
+      line-height: 0;
+    }
+
+    .game-frame-wrap::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border: 2px solid var(--cyan);
+      box-shadow:
+        0 0 14px var(--cyan),
+        inset 0 0 14px rgba(0, 255, 255, 0.05);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .game-frame {
+      display: block;
+      width: 1280px;
+      height: 720px;
+      border: none;
+      background: #02000a;
+    }
+
+    .game-hint {
+      font-size: 0.75rem;
+      color: var(--dim);
+      letter-spacing: 0.1em;
+      text-align: center;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       BUDGET TABLE
+    ══════════════════════════════════════════════════════════════ */
+    .budget-table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 660px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.95rem;
+    }
+
+    .budget-table th,
+    .budget-table td {
+      padding: 0.6em 1.2em;
+      text-align: left;
+      border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+      vertical-align: top;
+    }
+
+    .budget-table th {
+      color: var(--cyan);
+      text-shadow: 0 0 6px var(--cyan);
+      letter-spacing: 0.2em;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      padding-bottom: 0.8em;
+    }
+
+    .budget-table td:first-child {
+      color: var(--pink);
+      text-shadow: 0 0 4px var(--pink);
+      white-space: nowrap;
+      font-weight: bold;
+    }
+
+    .budget-table tbody tr:last-child td {
+      border-top: 1px solid var(--cyan);
+      box-shadow: 0 -1px 6px var(--cyan);
+      border-bottom: none;
+      margin-top: 0.4em;
+      color: var(--cyan);
+      text-shadow: 0 0 6px var(--cyan);
+      font-weight: bold;
+    }
+
+    .budget-table tbody tr:last-child td:first-child {
+      color: var(--cyan);
+      text-shadow: 0 0 6px var(--cyan);
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       FOOTER
+    ══════════════════════════════════════════════════════════════ */
+    .site-footer {
+      padding: 40px 20px;
+      text-align: center;
+      font-size: 0.72rem;
+      letter-spacing: 0.15em;
+      color: var(--dim);
+    }
+    .site-footer a { color: var(--cyan); text-decoration: none; }
+    .site-footer a:hover { text-shadow: 0 0 8px var(--cyan); }
+
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     HERO / LANDING
+══════════════════════════════════════════════════════════════════ -->
+<section class="hero">
+
+  <h1 class="hero-title glow-cyan">Streetlighter</h1>
+
+  <p class="hero-subtitle glow-pink">Eine interaktive Lichtinstallation auf dem Fahrrad</p>
+
+  <div class="hero-desc">
+    <p>Fahrradfahren bereitet Freude, ist im Alltag jedoch auch mit Herausforderungen verbunden. Um diese Erfahrung den Besucherinnen und Besuchern des LiLu auf spielerische Weise zu vermitteln, schlagen wir auf dem Inseli eine interaktive Fahrrad-Installation vor. Die Installation soll einerseits für das Fahrrad und seine gesundheitlichen Vorteile sensibilisieren, andererseits durch die erzeugte Illusion von Geschwindigkeit überraschen und unterhalten.</p>
+    <p>Für Gesundheit und Umwelt. Für eine Velostadt Luzern.</p>
+  </div>
+
+  <img src="Concept_sketch.jpeg" alt="Konzeptskizze" style="width:70vw; max-width:1280px; margin: 1rem 0;">
+
+</section>
+
+<div class="neon-divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ÜBER UNS
+══════════════════════════════════════════════════════════════════ -->
+<section class="text-section">
+
+  <p class="hero-subtitle glow-pink">Über uns</p>
+
+  <div class="hero-desc">
+    <p>Aurel, Céline und Jonas sind in Luzern aufgewachsen, in ihrem Alltag haben sie es oft mit Planung und Ausarbeitung von technischen Projekten zu tun. Jonas arbeitet in einem Architekturbüro in Zürich, Aurel bei der ABB in der Innovationsabteilung, Celine als Lichtplanerin. Nebenberuflich ist Aurel als Lichttechniker und Musiker in Luzern engagiert.</p>
+  </div>
+
+</section>
+
+<div class="neon-divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     DAS SPIEL
+══════════════════════════════════════════════════════════════════ -->
+<section class="game-section">
+
+  <p class="hero-subtitle glow-pink">Das Spiel</p>
+
+  <div class="hero-desc">
+    <p>Dies ist eine frühe Demo-Version des Spiels welche das Konzept zeigt. Bei erfolgreicher Projekteingabe wird das Spiel noch weiter ausgearbeitet. Um das Konzept jetzt schon zu zeigen, hosten wir eine Web-Demo auf unserer Website. Benutze entweder den Touchscreen oder die Pfeiltasten auf dem Keyboard um das "Fahrrad" an den Hindernissen vorbei zu steuern. Im Spiel werden Hindernisse und zu sammelnde Punkte mit bezug auf Luzern auftauchen. Es ist ein "Endlosscroller" bei welchem die Besucher versuchen den Highscore zu knacken.</p>
+  </div>
+
+  <div class="game-frame-wrap">
+    <iframe
+      class="game-frame"
+      src="game/shell.html"
+      title="Streetlighter — playable demo"
+      allow="autoplay"
+      scrolling="no"
+    ></iframe>
+  </div>
+
+  <p class="game-hint">
+    Klicke das Spiel um es zu fokussieren &nbsp;·&nbsp;
+    LINKS / RECHTS Pfeiltasten zum Steuern &nbsp;·&nbsp;
+    Hindernissen ausweichen &nbsp;·&nbsp;
+    Münzen sammeln &nbsp;·&nbsp;
+    LEERTASTE zum Neustart
+  </p>
+
+</section>
+
+<div class="neon-divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     DER PROTOTYP
+══════════════════════════════════════════════════════════════════ -->
+<section class="video-section">
+
+  <p class="hero-subtitle glow-pink">Der Prototyp</p>
+
+  <div class="hero-desc">
+    <p>An der Installation am Lilu wird das Spiel über ein Fahrrad welches fix montiert ist gesteuert. Über die Bremsen am Lenkrad kann nach links oder rechts gesteuert werden um den Hindernissen auszuweichen. Die Fahrradklingel verscheucht Schwäne von der Strasse und mit den Pedalen kann die Geschwindigkeit beeinflusst werden.</p>
+    <p>Die Steuerung haben wir bereits an unserem Hardware Prototyp erfolgreich getestet.</p>
+  </div>
+
+  <div class="video-wrap">
+    <video
+      class="demo-video"
+      src="real_demo.mp4"
+      autoplay
+      loop
+      muted
+      playsinline
+    ></video>
+  </div>
+
+
+  <p class="hero-subtitle glow-pink">Technischer Projektbeschrieb</p>
+
+  <div class="hero-desc">
+    <p><strong style="color:var(--cyan); letter-spacing:0.1em;">Material</strong></p>
+    <ul>
+      <li>Fahrrad mit Korb (optional ein Nextbike)</li>
+      <li>Kurzdistanzbeamer</li>
+      <li>Wetterfestes Gehäuse für den Beamer</li>
+      <li>Fahrradrolle um Hinterrad vom Boden abzuheben</li>
+      <li>Optional: LED entlang dem Fahrrad während Stand-By Modus</li>
+      <li>Verlängerungskabel, stolperfallenfrei verlegt bis Stromanschluss</li>
+    </ul>
+
+    <p style="margin-top:1.2em;"><strong style="color:var(--cyan); letter-spacing:0.1em;">Fläche</strong></p>
+    <ul>
+      <li>2 m² für Fahrrad</li>
+      <li>5 m² Projektionsfläche am Boden vor dem Fahrrad</li>
+    </ul>
+
+    <p style="margin-top:1.2em;"><strong style="color:var(--cyan); letter-spacing:0.1em;">Anschlüsse</strong></p>
+    <ul>
+      <li>230 V Stromanschluss</li>
+    </ul>
+
+    <p style="margin-top:1.2em;"><strong style="color:var(--cyan); letter-spacing:0.1em;">Montagezeit und Abbau</strong></p>
+    <p>Fahrrad, Gehäuse, Beamer und Software wird von den Künstlern bereitgestellt. Der Aufbau und Vorbereitung der Konstruktion sollte nicht mehr als 30 Minuten dauern — das Fahrrad kann am Ende des Abends von der Fahrradrolle abmontiert und weggerollt werden. Es bleiben keine permanenten Installationen für den Rest des Tages oder nach dem LiLu bestehen.</p>
+  </div>
+
+</section>
+
+<div class="neon-divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PROJEKT BUDGET
+══════════════════════════════════════════════════════════════════ -->
+<section class="text-section">
+
+  <p class="hero-subtitle glow-pink">Projekt Budget</p>
+
+  <div class="hero-desc">
+    <p>Die Kosten für das Projekt sind sehr überschaubar, Hauptpreisträger wird der Projektor sowie das Fahrrad sein. Beim Projektor gibt es vielleicht auch Möglichkeiten das Gerät über die Partner vom Lilu zu fairen Konditionen zu mieten? Beim Fahrrad streben wir eine Kooperation mit Nextbike an.</p>
+  </div>
+
+  <table class="budget-table">
+    <thead>
+      <tr>
+        <th>CHF</th>
+        <th>Beschreibung</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>360</td>
+        <td>(Kurzdistanz) Projektor: Miete oder Gebrauchtkauf (z.B. SAMSUNG Projektor The Freestyle LFF3)</td>
+      </tr>
+      <tr>
+        <td>123</td>
+        <td>Fahrradrolle (z.B. Elite Qubo Fluid oder eigene Konstruktion)</td>
+      </tr>
+      <tr>
+        <td>200</td>
+        <td>Fahrrad: Gebrauchtkauf oder Kooperation mit Nextbike</td>
+      </tr>
+      <tr>
+        <td>100</td>
+        <td>Wetterfestes Gehäuse für Beamer</td>
+      </tr>
+      <tr>
+        <td>100</td>
+        <td>LED Beleuchtung für Fahrrad im Stand-By RGB mit IP65</td>
+      </tr>
+      <tr>
+        <td>40</td>
+        <td>Raspberry Pi (Computer)</td>
+      </tr>
+      <tr>
+        <td>923</td>
+        <td>Gesamtkosten (Schätzung)</td>
+      </tr>
+    </tbody>
+  </table>
+
+</section>
+
+<div class="neon-divider"></div>
+
+<footer class="site-footer">
+  Built with <a href="https://love2d.org" target="_blank" rel="noopener">LÖVE</a>
+  &nbsp;·&nbsp;
+  Runs in browser via <a href="https://github.com/Davidobot/love.js" target="_blank" rel="noopener">love.js</a>
+</footer>
+
+<script>
+  function scaleGame() {
+    const wrap  = document.querySelector('.game-frame-wrap');
+    const frame = document.querySelector('.game-frame');
+    if (!wrap || !frame) return;
+    const available = Math.min(window.innerWidth - 40, 1280);
+    const scale = available / 1280;
+    if (scale < 1) {
+      frame.style.transform       = 'scale(' + scale + ')';
+      frame.style.transformOrigin = 'top left';
+      wrap.style.width  = available + 'px';
+      wrap.style.height = (720 * scale) + 'px';
+    } else {
+      frame.style.transform = frame.style.transformOrigin = '';
+      wrap.style.width = wrap.style.height = '';
+    }
+  }
+  scaleGame();
+  window.addEventListener('resize', scaleGame);
+</script>
+</body>
+</html>
